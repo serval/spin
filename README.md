@@ -1,5 +1,7 @@
 # spin
 
+![](https://github.com/serval/spin/actions/workflows/main.yml/badge.svg)
+
 `spin` is a basic tool for running multiple copies of a command simultaneously and prefixing their
 standard output / standard error streams with the process ID of each copy.
 
