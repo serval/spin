@@ -15,7 +15,7 @@ fn emit_prefixed_output(pid: u32, nonblock_stdio: &mut NonBlockingReader<impl As
                 // prefix every line of output with the child's process number
                 let prefixed_str = str
                     .trim()
-                    .split("\n")
+                    .split('\n')
                     .map(|line| format!("[{pid}] {line}"))
                     .collect::<Vec<String>>()
                     .join("\n");
@@ -27,7 +27,7 @@ fn emit_prefixed_output(pid: u32, nonblock_stdio: &mut NonBlockingReader<impl As
                 // there's no way to know)
                 let buf = err.into_bytes();
                 std::io::stdout()
-                    .write(&buf[..])
+                    .write_all(&buf[..])
                     .expect("Failed to write output");
             }
         };
