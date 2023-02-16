@@ -2,36 +2,44 @@ use nonblock::NonBlockingReader;
 use std::io::{Read, Write};
 use std::os::fd::AsRawFd;
 use std::process::{exit, Child, ChildStderr, ChildStdout, Command, Stdio};
+use std::thread::sleep;
+use std::time::Duration;
 
-fn emit_prefixed_output(pid: u32, nonblock_stdio: &mut NonBlockingReader<impl AsRawFd + Read>) {
+fn emit_prefixed_output(
+    pid: u32,
+    nonblock_stdio: &mut NonBlockingReader<impl AsRawFd + Read>,
+) -> usize {
     let mut buf = vec![];
     let bytes_read = nonblock_stdio
         .read_available(&mut buf)
         .expect("Failed to read from child process");
 
-    if bytes_read > 0 {
-        match String::from_utf8(buf) {
-            Ok(str) => {
-                // prefix every line of output with the child's process number
-                let prefixed_str = str
-                    .trim()
-                    .split('\n')
-                    .map(|line| format!("[{pid}] {line}"))
-                    .collect::<Vec<String>>()
-                    .join("\n");
-                println!("{prefixed_str}");
-            }
-            Err(err) => {
-                // child isn't writing UTF-8 data, apparently; just write it out as-is
-                // (it's possible that we just read in the middle of a multi-byte sequence, but
-                // there's no way to know)
-                let buf = err.into_bytes();
-                std::io::stdout()
-                    .write_all(&buf[..])
-                    .expect("Failed to write output");
-            }
-        };
+    if bytes_read == 0 {
+        return 0;
     }
+    match String::from_utf8(buf) {
+        Ok(str) => {
+            // prefix every line of output with the child's process number
+            let prefixed_str = str
+                .trim()
+                .split('\n')
+                .map(|line| format!("[{pid}] {line}"))
+                .collect::<Vec<String>>()
+                .join("\n");
+            println!("{prefixed_str}");
+        }
+        Err(err) => {
+            // child isn't writing UTF-8 data, apparently; just write it out as-is
+            // (it's possible that we just read in the middle of a multi-byte sequence, but
+            // there's no way to know)
+            let buf = err.into_bytes();
+            std::io::stdout()
+                .write_all(&buf[..])
+                .expect("Failed to write output");
+        }
+    };
+
+    bytes_read
 }
 
 fn main() {
@@ -82,18 +90,26 @@ fn main() {
     // Children are removed from this list when they stop producing output; as long as we have
     // anything left in the Vec, there is work to do.
     while !children.is_empty() {
-        // Consume the output of each of the child processes. We iterate through the list in reverse
-        // order by index so we can remove children that have finished without disturbing the other
-        // children we haven't iterated over yet.
+        let mut total_num_bytes_read = 0;
+
+        // Consume the output of each of the child processes. Note that this iteration consumes
+        // the original children array; we'll keep track of which child processes are still active
+        // and put them back when we're done.
         let mut remaining_children = vec![];
         for (handle, mut nonblock_stdout, mut nonblock_stderr) in children.into_iter() {
-            emit_prefixed_output(handle.id(), &mut nonblock_stdout);
-            emit_prefixed_output(handle.id(), &mut nonblock_stderr);
+            total_num_bytes_read += emit_prefixed_output(handle.id(), &mut nonblock_stdout);
+            total_num_bytes_read += emit_prefixed_output(handle.id(), &mut nonblock_stderr);
 
             if !nonblock_stdout.is_eof() {
                 remaining_children.push((handle, nonblock_stdout, nonblock_stderr));
             }
         }
         children = remaining_children;
+
+        if total_num_bytes_read == 0 {
+            // None of the children had any output; sleep briefly so we don't burn an unreasonable
+            // amount of CPU cycles.
+            sleep(Duration::from_millis(100))
+        }
     }
 }
