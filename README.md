@@ -18,3 +18,19 @@ $ spin 2 ping 1.1.1.1
 ```
 
 When you terminate `spin`, all of the child processes will terminate as well.
+
+## Installation
+
+This project uses [just](https://github.com/casey/just) (`brew install just`) for development workflows and automation. Run `just` with no arguments to see a list of available commands.
+
+Once you have installed `just`, you can install `spin` with:
+
+```shell
+just install
+```
+
+Similarly, you can uninstall it with:
+
+```shell
+just uninstall
+```
